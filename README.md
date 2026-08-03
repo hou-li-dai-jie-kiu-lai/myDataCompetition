@@ -15,6 +15,8 @@ myDataCompetition/
 │   └── README.md          # 赛题说明与链接
 ├── tianchi-building/      # 天池：地球观察员-建筑物识别
 │   └── README.md          # 赛题说明与链接
+├── sany-excavator/        # 三一：挖掘机工作模式识别
+│   └── README.md          # 赛题说明与链接
 └── ...
 ```
 
