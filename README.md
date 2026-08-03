@@ -9,7 +9,9 @@
 ```
 myDataCompetition/
 ├── README.md              # 本文件
-├── tianchi-food-sound/    # 天池：美食侦探（食物声音识别）
+├── tianchi-food-sound/    # 天池：食物声音识别
+│   └── README.md          # 赛题说明与链接
+├── tianchi-heartbeat/     # 天池：心跳信号分类预测
 │   └── README.md          # 赛题说明与链接
 └── ...
 ```
