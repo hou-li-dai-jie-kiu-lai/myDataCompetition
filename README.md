@@ -9,11 +9,8 @@
 ```
 myDataCompetition/
 ├── README.md              # 本文件
-├── tianchi-xxx/           # 天池某大赛
-│   ├── baseline.py
-│   └── solution.ipynb
-├── kaggle-xxx/            # Kaggle 某竞赛
-│   └── ...
+├── tianchi-food-sound/    # 天池：美食侦探（食物声音识别）
+│   └── README.md          # 赛题说明与链接
 └── ...
 ```
 
