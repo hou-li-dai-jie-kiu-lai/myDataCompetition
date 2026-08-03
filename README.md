@@ -10,13 +10,12 @@
 myDataCompetition/
 ├── README.md              # 本文件
 ├── tianchi-food-sound/    # 天池：食物声音识别
-│   └── README.md          # 赛题说明与链接
 ├── tianchi-heartbeat/     # 天池：心跳信号分类预测
-│   └── README.md          # 赛题说明与链接
-├── tianchi-building/      # 天池：地球观察员-建筑物识别
-│   └── README.md          # 赛题说明与链接
+├── tianchi-building/      # 天池：建筑物识别
 ├── sany-excavator/        # 三一：挖掘机工作模式识别
-│   └── README.md          # 赛题说明与链接
+├── xfyun-modulation/      # 讯飞：通信系统调制格式识别与分类
+├── xfyun-credit-score/    # 讯飞：金融场景下用户信用分预测
+├── xfyun-churn/           # 讯飞：电信客户流失预测
 └── ...
 ```
 
