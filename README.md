@@ -13,6 +13,8 @@ myDataCompetition/
 │   └── README.md          # 赛题说明与链接
 ├── tianchi-heartbeat/     # 天池：心跳信号分类预测
 │   └── README.md          # 赛题说明与链接
+├── tianchi-building/      # 天池：地球观察员-建筑物识别
+│   └── README.md          # 赛题说明与链接
 └── ...
 ```
 
