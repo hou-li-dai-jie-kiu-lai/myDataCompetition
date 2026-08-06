@@ -8,8 +8,10 @@ from .pipeline import run_topline_stack, channels_from_npz
 from .dataio import load_horizontal_well, build_residual_table
 from .train import train_topline, save_artifacts
 from .infer import infer_topline, write_submission
+from . import config
 
 __all__ = [
+    "config",
     "rmse",
     "well_rmse_table",
     "iter_group_kfold",

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from .config import N_PARTICLES, N_SEEDS
 from .features_pf import TRACK_KEYS, pf_track
 
 
@@ -27,8 +28,8 @@ def list_wells(data_dir: Path) -> list[str]:
 def build_well_frame(
     data_dir: Path,
     wid: str,
-    n_seeds: int = 8,
-    n_particles: int = 120,
+    n_seeds: int = N_SEEDS,
+    n_particles: int = N_PARTICLES,
     require_label: bool = True,
 ) -> pd.DataFrame | None:
     """
@@ -97,8 +98,8 @@ def build_well_frame(
 def build_dataset(
     data_dir: Path,
     wells: list[str] | None = None,
-    n_seeds: int = 8,
-    n_particles: int = 120,
+    n_seeds: int = N_SEEDS,
+    n_particles: int = N_PARTICLES,
     require_label: bool = True,
     max_wells: int | None = None,
 ) -> pd.DataFrame:

@@ -1,4 +1,4 @@
-"""Infer test wells and write submission.csv."""
+"""Infer test wells and write submission.csv (defaults = final PF settings)."""
 from __future__ import annotations
 
 import argparse
@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from rogii.config import N_PARTICLES, N_SEEDS
 from rogii.infer import infer_topline, write_submission
 
 
@@ -16,11 +17,21 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, default=None, help="data root containing test/")
     ap.add_argument("--artifact", type=Path, default=ROOT / "outputs" / "topline_artifact.joblib")
-    ap.add_argument("--n-seeds", type=int, default=8)
-    ap.add_argument("--n-particles", type=int, default=120)
+    ap.add_argument("--n-seeds", type=int, default=N_SEEDS)
+    ap.add_argument("--n-particles", type=int, default=N_PARTICLES)
     ap.add_argument("--max-wells", type=int, default=None)
+    ap.add_argument(
+        "--fast",
+        action="store_true",
+        help="smoke PF settings (4 seeds / 40 particles); must match train --fast",
+    )
     ap.add_argument("--out", type=Path, default=ROOT / "outputs" / "submission.csv")
     args = ap.parse_args()
+
+    if args.fast:
+        args.n_seeds = 4
+        args.n_particles = 40
+        print("[fast] smoke PF overrides", flush=True)
 
     data = args.data
     if data is None:
@@ -33,6 +44,7 @@ def main() -> None:
     sample = data / "sample_submission.csv"
     sample = sample if sample.exists() else None
 
+    print(f"[cfg] seeds={args.n_seeds} particles={args.n_particles}", flush=True)
     pred = infer_topline(
         test_dir,
         args.artifact,

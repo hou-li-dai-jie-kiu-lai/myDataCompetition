@@ -2,59 +2,46 @@
 
 Kaggle：[rogii-wellbore-geology-prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
 
-一条 topline 的**完整可复现流水线**（特征 → 训练 OOF → stacking → 后处理 → 推理提交）。  
-不含赛题数据包、不含训练好的权重文件、不含 API token。
+一条 topline 的完整可复现流水线。默认超参对齐我们**最终私榜提交**设定。
 
 | 项 | 值 |
 |----|-----|
+| 私榜 | **8.836**（最终约第 422） |
+| 公榜（同提交） | 7.841 |
+| 本地 OOF proj（原实验记录） | ≈ 8.40 |
 | 指标 | RMSE ↓ |
-| 我们私榜参考 | 8.836（最终约第 422） |
-| 验证协议 | 按井 `GroupKFold` |
+| CV | GroupKFold × 5（按井） |
+
+不含赛题数据包、不含已训练权重、不含 API token。
 
 ---
 
 ## 赛题与数据
 
-预测水平井侧钻段 **TVT**。每口井：`{well}__horizontal_well.csv` + `{well}__typewell.csv`。  
-评价段 `TVT_input` 为 NaN；训练井上仍有 `TVT` 标签。
+预测水平井侧钻段 **TVT**。每口井：`{well}__horizontal_well.csv` + `{well}__typewell.csv`。
 
 ```bash
 kaggle competitions download -c rogii-wellbore-geology-prediction -p ./data
-# 解压后设置：
-export ROGII_DATA_ROOT=/path/to/data   # 内含 train/ test/ sample_submission.csv
+export ROGII_DATA_ROOT=/path/to/data   # 含 train/ test/ sample_submission.csv
 ```
 
 ---
 
-## Topline（唯一主线）
+## Topline（与最终结果对齐）
 
-1. **PF 特征**：raw / heel-affine / dual 多 seed 粒子滤波 → 多尺度 track（残差相对 last_known）  
-2. **Hard**：track 上 `Ridge(positive=True)`  
-3. **Main / Alt**：CatBoost 残差回归（Alt 去掉 dual tracks）  
-4. **Anchor**：Stage2 CatBoost 拟合 `(y - main)`  
-5. **Stack**：多 α Ridge 袋装残差 + 与 anchor 折内融合  
-6. **PP**：warm-up（τ=85）+ `U=TVT+Z` 投影  
-7. **提交**：`tvt = last_known + delta`
+默认写在 `src/rogii/config.py`：
 
-> 说明：竞赛中还会用更重的 DTW/beam/modescan 等；本仓库给出的是**同一拓扑、可独立跑通**的完整实现。加大 `--n-seeds` / 井数可逼近更强特征设定。
+| 模块 | 最终设定 |
+|------|----------|
+| PF | **64 seeds × 250 particles**；scales `(3,5,8,12)`；dual `±15`；raw / affine / dual tracks |
+| Hard | `Ridge(alpha=1, positive=True)` on tracks |
+| Main Cat | 对 hard 的残差；`8000` iter, depth `7`, lr `0.025`, `od_wait=300` |
+| Alt Cat | 第二通道（去 dual tracks）；同量级、seed=7 |
+| Anchor | Stage2 Cat 拟合 `(y-main)` + train 上 shrink≤**1.6** |
+| Stack | α∈`{0.3,1,3,10,30}` Ridge bag ⊕ 与 anchor 折内融合 |
+| PP | warm-up **τ=85** + U=TVT+Z 投影 **blend=0.7** |
 
----
-
-## 代码结构
-
-```text
-src/rogii/
-  features_pf.py   粒子滤波与 track
-  dataset.py       从 CSV 构建训练/推理表
-  train.py         Hard + Cat + Anchor + Stack
-  infer.py         折平均推理 + PP + submission
-  metrics.py / cv.py / postprocess.py / stack.py / pipeline.py
-scripts/
-  01_eda.py        数据概览
-  02_demo.py       无数据合成冒烟（只测 stack）
-  04_train.py      完整训练
-  05_infer.py      完整推理
-```
+> 仓库实现了同一拓扑与最终超参。竞赛全量特征里还有 modescan / beam / bi_* 等增广；本复现以 PF tracks + 几何为主干。要贴近最终分数请用**默认全量参数**在完整 `train/` 上跑，不要用 `--fast`。
 
 ---
 
@@ -64,26 +51,46 @@ scripts/
 cd rogii-wellbore
 pip install -r requirements.txt
 
-# 无数据冒烟
+# 无数据冒烟（只测 stack）
 python scripts/02_demo.py
 
-# 完整训练（示例：小规模快速验证）
-python scripts/04_train.py --data $ROGII_DATA_ROOT --max-wells 20 --n-seeds 4 --n-particles 80 --n-splits 3 --cat-iterations 150
+# 最终设定训练（耗时长：全井 × 64×250 PF）
+python scripts/04_train.py --data $ROGII_DATA_ROOT
+# 可选 GPU：
+python scripts/04_train.py --data $ROGII_DATA_ROOT --gpu
 
-# 推理（使用 outputs/topline_artifact.joblib）
-python scripts/05_infer.py --data $ROGII_DATA_ROOT --n-seeds 4 --n-particles 80
+# 最终设定推理
+python scripts/05_infer.py --data $ROGII_DATA_ROOT
+
+# 仅管道冒烟（参数故意缩小，分数不可比）
+python scripts/04_train.py --data $ROGII_DATA_ROOT --fast
+python scripts/05_infer.py --data $ROGII_DATA_ROOT --fast
 ```
 
-全量训练去掉 `--max-wells`，并提高 `--n-seeds`（如 16–64）、`--n-particles`（如 200–250）。
+产物在 `outputs/`（gitignore）：`topline_artifact.joblib`、`submission.csv`。
 
-产物默认写在 `outputs/`（已 gitignore）：`topline_artifact.joblib`、`submission.csv`。
+---
+
+## 代码结构
+
+```text
+src/rogii/
+  config.py        最终超参（唯一真相来源）
+  features_pf.py   PF tracks
+  dataset.py       CSV → 特征表
+  train.py         Hard + Cat + Anchor + Stack
+  infer.py         折平均 + PP + submission
+  metrics/cv/postprocess/stack/pipeline/...
+scripts/
+  01_eda.py  02_demo.py  04_train.py  05_infer.py
+```
 
 ---
 
 ## 注意
 
-- 必须按井分组；禁止同井 train 解释直接覆写 test  
-- 前缀启发式 gate 容易离线好看、线上翻车；本 topline **不依赖**这类 gate  
+- 必须按井分组；禁止同井 train 解释覆写 test  
+- `--fast` 只用于验证代码可跑，**不能**对标私榜 8.836  
 - 数据受竞赛规则约束，勿公开二次分发
 
 ## License

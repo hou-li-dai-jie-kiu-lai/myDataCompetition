@@ -7,22 +7,28 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from .config import N_PARTICLES, N_SEEDS, PP_BLEND, PP_TAU
 from .dataset import build_dataset
 from .features_pf import track_matrix
 from .postprocess import apply_pp_delta, warmup_delta
 
 
-def _predict_fold(df: pd.DataFrame, fold: dict, track_cols: list[str], cat_cols: list[str], s2_cols: list[str]):
+def _predict_fold(df: pd.DataFrame, fold: dict, track_cols: list[str], s2_cols: list[str]):
     M = track_matrix(df, track_cols)
-    hard = fold["hard_ridge"].predict(fold["hard_scaler"].transform(M)).astype(np.float32)
-    X = df[cat_cols].copy()
-    X["hard"] = hard
+    hard = fold["hard_ridge"].predict(M).astype(np.float32)
     feat_cols = fold["feat_cols"]
-    main = fold["main_cat"].predict(X[feat_cols]).astype(np.float32)
-    alt = fold["alt_cat"].predict(X[fold["alt_cols"]]).astype(np.float32)
+    X = df[[c for c in feat_cols if c in df.columns]].copy()
+    for c in ("hard", "pf_ens_delta", "pf_ridge_hard"):
+        if c in feat_cols:
+            X[c] = hard
+    # ensure column order
+    X = X.reindex(columns=feat_cols, fill_value=0.0)
+    main = (hard + fold["main_cat"].predict(X[feat_cols]).astype(np.float32)).astype(np.float32)
+    alt = (
+        hard + fold["alt_cat"].predict(X[fold["alt_cols"]]).astype(np.float32)
+    ).astype(np.float32)
     stock = df["stock"].to_numpy(np.float32)
     md = df["md_since"].to_numpy(np.float32)
-    # stage2 features (no expanding on test across wells — per-well cum would need order; use zeros/simple)
     ae = (main - hard).astype(np.float32)
     s2 = pd.DataFrame(
         {
@@ -32,11 +38,14 @@ def _predict_fold(df: pd.DataFrame, fold: dict, track_cols: list[str], cat_cols:
             "ae": ae,
             "abs_ae": np.abs(ae),
             "md": md,
-            "em": ae,  # fallback
+            "em": ae,
             "es": np.abs(ae),
         }
     )
-    anchor = (main + fold["anchor_cat"].predict(s2[s2_cols])).astype(np.float32)
+    shrink = float(fold.get("anchor_shrink", 1.0))
+    anchor = (
+        main + shrink * fold["anchor_cat"].predict(s2[s2_cols]).astype(np.float32)
+    ).astype(np.float32)
 
     X_stack = np.column_stack([main, alt, hard, hard, stock, md, anchor])
     acc = np.zeros(len(df), np.float64)
@@ -44,16 +53,15 @@ def _predict_fold(df: pd.DataFrame, fold: dict, track_cols: list[str], cat_cols:
         Xs = pack["scaler"].transform(X_stack)
         acc += main + pack["ridge"].predict(Xs)
     ridge_bag = (acc / max(len(fold["stack_packs"]), 1)).astype(np.float32)
-    w = float(fold.get("blend_w", 0.5))
-    blend = (w * anchor + (1.0 - w) * ridge_bag).astype(np.float32)
-    return blend
+    w = float(fold.get("blend_w", 0.365))
+    return (w * anchor + (1.0 - w) * ridge_bag).astype(np.float32)
 
 
 def infer_topline(
     data_dir: Path,
     artifact_path: Path,
-    n_seeds: int = 8,
-    n_particles: int = 120,
+    n_seeds: int = N_SEEDS,
+    n_particles: int = N_PARTICLES,
     max_wells: int | None = None,
 ) -> pd.DataFrame:
     art = joblib.load(artifact_path)
@@ -64,17 +72,14 @@ def infer_topline(
         require_label=False,
         max_wells=max_wells,
     )
-    preds = []
-    for fold in art["fold_models"]:
-        preds.append(
-            _predict_fold(df, fold, art["track_cols"], art["cat_cols"], art["s2_cols"])
-        )
+    preds = [
+        _predict_fold(df, fold, art["track_cols"], art["s2_cols"]) for fold in art["fold_models"]
+    ]
     delta = np.mean(np.stack(preds, 0), axis=0).astype(np.float32)
-    tau = float(art.get("pp", {}).get("tau", 85.0))
-    blend_pp = float(art.get("pp", {}).get("blend", 0.7))
+    tau = float(art.get("pp", {}).get("tau", PP_TAU))
+    blend_pp = float(art.get("pp", {}).get("blend", PP_BLEND))
     delta = warmup_delta(delta, df["md_since"].to_numpy(np.float32), tau=tau)
 
-    # absolute TVT + geometric projection
     well_frames = {}
     data_dir = Path(data_dir)
     for w in df["well"].astype(str).unique():
@@ -87,7 +92,7 @@ def infer_topline(
         ids=df["id"].astype(str).to_numpy(),
         tau=tau,
         blend=blend_pp,
-        do_warmup=False,  # already warmed
+        do_warmup=False,
         do_proj=True,
     )
     tvt = df["last_known"].to_numpy(np.float64) + delta
@@ -101,7 +106,6 @@ def write_submission(pred: pd.DataFrame, sample_csv: Path | None, out_csv: Path)
         sample = pd.read_csv(sample_csv)
         merged = sample[["id"]].merge(pred, on="id", how="left")
         if merged["tvt"].isna().any():
-            # fill missing ids with pred mean / 0
             merged["tvt"] = merged["tvt"].fillna(float(pred["tvt"].mean()))
         merged.to_csv(out_csv, index=False)
     else:

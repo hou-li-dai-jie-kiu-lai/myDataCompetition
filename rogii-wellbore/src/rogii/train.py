@@ -1,4 +1,4 @@
-"""Train topline: hard Ridge + Cat main/alt + Stage2 anchor + stack."""
+"""Train topline aligned with final private-LB recipe defaults."""
 from __future__ import annotations
 
 import json
@@ -12,44 +12,23 @@ from catboost import CatBoostRegressor, Pool
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 
+from .config import (
+    ANCHOR_SMAX,
+    CAT_ALT,
+    CAT_ANCHOR,
+    CAT_MAIN,
+    HARD_RIDGE_ALPHA,
+    N_SPLITS,
+    PP_BLEND,
+    PP_TAU,
+    STACK_ALPHAS,
+)
 from .cv import iter_group_kfold
 from .dataset import default_cat_cols, default_track_cols
 from .features_pf import track_matrix
 from .metrics import rmse
 from .postprocess import warmup_delta
-from .stack import DEFAULT_ALPHAS, fit_predict_stack_oof
-
-
-CAT_MAIN = dict(
-    loss_function="RMSE",
-    iterations=400,
-    depth=6,
-    learning_rate=0.05,
-    l2_leaf_reg=3.0,
-    random_seed=42,
-    verbose=False,
-    allow_writing_files=False,
-)
-CAT_ALT = dict(
-    loss_function="RMSE",
-    iterations=300,
-    depth=5,
-    learning_rate=0.06,
-    l2_leaf_reg=5.0,
-    random_seed=7,
-    verbose=False,
-    allow_writing_files=False,
-)
-CAT_ANCHOR = dict(
-    loss_function="RMSE",
-    iterations=200,
-    depth=4,
-    learning_rate=0.05,
-    l2_leaf_reg=4.0,
-    random_seed=11,
-    verbose=False,
-    allow_writing_files=False,
-)
+from .stack import fit_predict_stack_oof
 
 
 @dataclass
@@ -61,6 +40,36 @@ class TrainArtifacts:
     oof: dict[str, np.ndarray]
     stack_summary: dict
     pp: dict
+
+
+def _cat_cfg(base: dict, iterations: int | None = None, use_gpu: bool = False) -> dict:
+    cfg = dict(base)
+    if iterations is not None:
+        cfg["iterations"] = int(iterations)
+    if use_gpu:
+        cfg["task_type"] = "GPU"
+        cfg["devices"] = "0"
+    else:
+        cfg["task_type"] = "CPU"
+        cfg.pop("devices", None)
+    return cfg
+
+
+def _fit_cat(cfg: dict, Xtr, ytr, Xva, yva) -> CatBoostRegressor:
+    try:
+        m = CatBoostRegressor(**cfg)
+        m.fit(Pool(Xtr, ytr), eval_set=Pool(Xva, yva), use_best_model=True)
+        return m
+    except Exception as e:
+        if cfg.get("task_type") == "GPU":
+            print("  gpu fail → CPU", type(e).__name__, flush=True)
+            cfg = dict(cfg)
+            cfg["task_type"] = "CPU"
+            cfg.pop("devices", None)
+            m = CatBoostRegressor(**cfg)
+            m.fit(Pool(Xtr, ytr), eval_set=Pool(Xva, yva), use_best_model=True)
+            return m
+        raise
 
 
 def _expanding_stats(wells: np.ndarray, v: np.ndarray):
@@ -82,15 +91,12 @@ def _expanding_stats(wells: np.ndarray, v: np.ndarray):
 
 def train_topline(
     df: pd.DataFrame,
-    n_splits: int = 5,
-    pp_tau: float = 85.0,
+    n_splits: int = N_SPLITS,
+    pp_tau: float = PP_TAU,
+    pp_blend: float = PP_BLEND,
     cat_iterations: int | None = None,
+    use_gpu: bool = False,
 ) -> TrainArtifacts:
-    if cat_iterations is not None:
-        CAT_MAIN["iterations"] = cat_iterations
-        CAT_ALT["iterations"] = max(100, cat_iterations // 2)
-        CAT_ANCHOR["iterations"] = max(80, cat_iterations // 3)
-
     y = df["y"].to_numpy(np.float32)
     wells = df["well"].astype(str).to_numpy()
     md = df["md_since"].to_numpy(np.float32)
@@ -104,33 +110,40 @@ def train_topline(
     alt_oof = np.zeros(len(df), np.float32)
     fold_models: list[dict] = []
 
+    main_cfg = _cat_cfg(CAT_MAIN, cat_iterations, use_gpu=use_gpu)
+    alt_cfg = _cat_cfg(CAT_ALT, cat_iterations, use_gpu=use_gpu)
+    anchor_cfg = _cat_cfg(CAT_ANCHOR, cat_iterations, use_gpu=use_gpu)
+
     for fold, tr, va in iter_group_kfold(wells, n_splits=n_splits):
-        sc = StandardScaler()
-        Mt = sc.fit_transform(M_all[tr])
-        Mv = sc.transform(M_all[va])
-        hard_model = Ridge(alpha=1.0, positive=True).fit(Mt, y[tr])
-        hard_tr = hard_model.predict(Mt).astype(np.float32)
-        hard_va = hard_model.predict(Mv).astype(np.float32)
+        # Hard: Ridge(positive) on PF tracks (P20H)
+        hard_model = Ridge(HARD_RIDGE_ALPHA, positive=True).fit(M_all[tr], y[tr])
+        hard_tr = hard_model.predict(M_all[tr]).astype(np.float32)
+        hard_va = hard_model.predict(M_all[va]).astype(np.float32)
         hard_oof[va] = hard_va
 
         Xtr = df.iloc[tr][cat_cols].copy()
         Xva = df.iloc[va][cat_cols].copy()
         Xtr["hard"] = hard_tr
         Xva["hard"] = hard_va
-        feat_cols = cat_cols + ["hard"]
+        Xtr["pf_ens_delta"] = hard_tr
+        Xva["pf_ens_delta"] = hard_va
+        Xtr["pf_ridge_hard"] = hard_tr
+        Xva["pf_ridge_hard"] = hard_va
+        feat_cols = list(Xtr.columns)
 
-        main = CatBoostRegressor(**CAT_MAIN)
-        main.fit(Pool(Xtr[feat_cols], y[tr]))
-        main_oof[va] = main.predict(Xva[feat_cols]).astype(np.float32)
+        # Main: residual on hard (P20H)
+        y_main_tr = (y[tr] - hard_tr).astype(np.float32)
+        y_main_va = (y[va] - hard_va).astype(np.float32)
+        main = _fit_cat(main_cfg, Xtr[feat_cols], y_main_tr, Xva[feat_cols], y_main_va)
+        main_oof[va] = (hard_va + main.predict(Xva[feat_cols]).astype(np.float32)).astype(np.float32)
 
+        # Alt: second DNA, drop dual tracks, residual on hard
         alt_cols = [c for c in feat_cols if not str(c).startswith("trk_d_")]
-        alt = CatBoostRegressor(**CAT_ALT)
-        alt.fit(Pool(Xtr[alt_cols], y[tr]))
-        alt_oof[va] = alt.predict(Xva[alt_cols]).astype(np.float32)
+        alt = _fit_cat(alt_cfg, Xtr[alt_cols], y_main_tr, Xva[alt_cols], y_main_va)
+        alt_oof[va] = (hard_va + alt.predict(Xva[alt_cols]).astype(np.float32)).astype(np.float32)
 
         fold_models.append(
             {
-                "hard_scaler": sc,
                 "hard_ridge": hard_model,
                 "main_cat": main,
                 "alt_cat": alt,
@@ -160,13 +173,29 @@ def train_topline(
     )
     s2_cols = list(s2.columns)
     anchor_oof = np.zeros(len(df), np.float32)
+
     for fold, tr, va in iter_group_kfold(wells, n_splits=n_splits):
-        m = CatBoostRegressor(**CAT_ANCHOR)
-        m.fit(Pool(s2.iloc[tr][s2_cols], (y - main_oof)[tr]))
-        pred = (main_oof[va] + m.predict(s2.iloc[va][s2_cols])).astype(np.float32)
+        # Anchor Stage2: predict (y-main), then shrink on train (P69-style)
+        m = _fit_cat(
+            anchor_cfg,
+            s2.iloc[tr][s2_cols],
+            (y - main_oof)[tr],
+            s2.iloc[va][s2_cols],
+            (y - main_oof)[va],
+        )
+        pr_tr = m.predict(s2.iloc[tr][s2_cols]).astype(np.float32)
+        best_s, best_r = 0.0, rmse(y[tr], main_oof[tr])
+        for s in np.linspace(0.0, ANCHOR_SMAX, 41):
+            r = rmse(y[tr], main_oof[tr] + s * pr_tr)
+            if r < best_r:
+                best_r, best_s = r, float(s)
+        pred = (main_oof[va] + best_s * m.predict(s2.iloc[va][s2_cols]).astype(np.float32)).astype(
+            np.float32
+        )
         anchor_oof[va] = pred
         fold_models[fold]["anchor_cat"] = m
-        print(f"[anchor] fold{fold} rmse={rmse(y[va], pred):.4f}", flush=True)
+        fold_models[fold]["anchor_shrink"] = best_s
+        print(f"[anchor] fold{fold} shrink={best_s:.3f} rmse={rmse(y[va], pred):.4f}", flush=True)
 
     X_stack = np.column_stack([main_oof, alt_oof, hard_oof, hard_oof, stock, md, anchor_oof])
     stack_oof = fit_predict_stack_oof(
@@ -175,7 +204,7 @@ def train_topline(
 
     for fold, tr, va in iter_group_kfold(wells, n_splits=n_splits):
         packs = []
-        for alpha in DEFAULT_ALPHAS:
+        for alpha in STACK_ALPHAS:
             sc = StandardScaler()
             Xt = sc.fit_transform(X_stack[tr])
             reg = Ridge(alpha=alpha).fit(Xt, (y - main_oof)[tr])
@@ -195,7 +224,20 @@ def train_topline(
     summary["rmse_main"] = float(rmse(y, main_oof))
     summary["rmse_alt"] = float(rmse(y, alt_oof))
     summary["rmse_anchor"] = float(rmse(y, anchor_oof))
-    print("[topline]", json.dumps({k: v for k, v in summary.items() if k != "blend_weights"}, indent=2), flush=True)
+    summary["recipe"] = {
+        "n_splits": n_splits,
+        "hard_ridge_alpha": HARD_RIDGE_ALPHA,
+        "stack_alphas": list(STACK_ALPHAS),
+        "pp_tau": pp_tau,
+        "pp_blend": pp_blend,
+        "anchor_smax": ANCHOR_SMAX,
+        "cat_main_iterations": main_cfg["iterations"],
+    }
+    print(
+        "[topline]",
+        json.dumps({k: v for k, v in summary.items() if k not in ("blend_weights",)}, indent=2),
+        flush=True,
+    )
 
     return TrainArtifacts(
         track_cols=track_cols,
@@ -215,7 +257,7 @@ def train_topline(
             "wells": wells,
         },
         stack_summary=summary,
-        pp={"tau": pp_tau, "blend": 0.7},
+        pp={"tau": pp_tau, "blend": pp_blend},
     )
 
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-SCALES = (3.0, 5.0, 8.0, 12.0)
-DUAL_MODES = (-15.0, 0.0, 15.0)
+from .config import DUAL_MODES, INIT_SPREAD, N_PARTICLES, N_SEEDS, SCALES
+
 TRACK_KEYS = [f"s{sc:g}" for sc in SCALES] + ["mean", "ms_mean"]
 
 
@@ -17,7 +17,15 @@ def affine_cal(kgr, tw_at_k, min_pts=20):
     return float(a), float(b)
 
 
-def run_particle_filter(hw, tw, n_particles=250, seed=42, init_spread=2.0, modes=None, use_affine=False):
+def run_particle_filter(
+    hw,
+    tw,
+    n_particles=N_PARTICLES,
+    seed=42,
+    init_spread=INIT_SPREAD,
+    modes=None,
+    use_affine=False,
+):
     tw_s = tw.sort_values("TVT")
     tw_tvt = tw_s["TVT"].to_numpy(float)
     tw_gr = tw_s["GR"].fillna(tw_s["GR"].mean()).to_numpy(float)
@@ -105,7 +113,14 @@ def _ens_from_preds(preds, liks, scales=SCALES):
     return out
 
 
-def pf_track(hw, tw, dual=False, use_affine=False, n_seeds=8, n_particles=120):
+def pf_track(
+    hw,
+    tw,
+    dual=False,
+    use_affine=False,
+    n_seeds=N_SEEDS,
+    n_particles=N_PARTICLES,
+):
     kn = hw[hw["TVT_input"].notna()]
     ev = hw[hw["TVT_input"].isna()]
     if len(ev) == 0 or len(kn) < 5:

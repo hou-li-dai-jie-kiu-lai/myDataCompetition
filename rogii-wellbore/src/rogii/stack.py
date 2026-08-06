@@ -6,10 +6,11 @@ import numpy as np
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 
+from .config import BLEND_GRID, STACK_ALPHAS
 from .cv import iter_group_kfold
 from .metrics import rmse
 
-DEFAULT_ALPHAS = (0.3, 1.0, 3.0, 10.0, 30.0)
+DEFAULT_ALPHAS = STACK_ALPHAS
 
 
 @dataclass
@@ -39,7 +40,7 @@ def fit_predict_stack_oof(
     anchor: np.ndarray,
     alphas: tuple[float, ...] = DEFAULT_ALPHAS,
     n_splits: int = 5,
-    blend_grid: int = 41,
+    blend_grid: int = BLEND_GRID,
 ) -> StackOOFResult:
     """
     Topline stacking:
