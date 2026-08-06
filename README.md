@@ -22,3 +22,7 @@ myDataCompetition/
 ## 比赛汇总
 
 参赛记录与获奖情况汇总表见我的主页 👉 [hou-li-dai-jie-kiu-lai](https://github.com/hou-li-dai-jie-kiu-lai)（Data Competitions 章节），每行比赛对应的代码从这里跳转。
+
+## Kaggle
+
+- [`rogii-wellbore-p88`](./rogii-wellbore-p88): Kaggle ROGII Wellbore Geology Prediction — P88 writeup & repro kit (private LB 8.836)
