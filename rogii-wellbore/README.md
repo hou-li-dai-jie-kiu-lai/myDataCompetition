@@ -5,23 +5,58 @@ Kaggle · [rogii-wellbore-geology-prediction](https://www.kaggle.com/competition
 - **任务**：预测水平井侧钻段 **TVT**（RMSE ↓）
 - **数据**：每口井一对 CSV — `{well}__horizontal_well.csv` + `{well}__typewell.csv`
 - **CV**：GroupKFold × 5（按井分组）
-- **成绩**：Private **8.836** / Public **7.841**（约第 422）
+- **成绩**：Private Ranking **422 / 6191（铜牌）**；Private **8.836** / Public **7.841**
 
 本目录提供可运行的完整训练与推理代码（不含赛题数据包与已训练权重）。
 
 ---
 
-## 方法概览
+## 整体方案结构
 
-| 阶段 | 内容 |
-|------|------|
-| 特征 | 粒子滤波（PF）多尺度 TVT tracks：raw / affine / dual；附带几何与 GR 等列 |
-| Hard | `Ridge(α=1, positive=True)` 拟合 tracks |
-| Main Cat | 在 hard 上拟合残差（CatBoost） |
-| Alt Cat | 第二通道（去掉 dual tracks），同残差设定 |
-| Anchor | 第二阶段 Cat 拟合 `(y − main)`，训练集 shrink ≤ 1.6 |
-| Stack | 多 α Ridge bag `{0.3,1,3,10,30}`，再与 anchor 折内加权融合 |
-| 后处理 | MD warm-up（τ=85）+ `U = TVT + Z` 投影（blend=0.7） |
+端到端顺序如下（训练与推理共用同一套特征与后处理）：
+
+```text
+井 CSV（horizontal + typewell）
+        │
+        ▼
+① 特征：粒子滤波 PF tracks
+   · raw / affine / dual（多尺度）
+   · 几何 & GR 等辅助列
+        │
+        ▼
+② Hard：Ridge(α=1, positive) 拟合 tracks → hard / stock
+        │
+        ├──────────────────┐
+        ▼                  ▼
+③ Main Cat              ④ Alt Cat
+   hard 上残差              去掉 dual tracks 的残差通道
+        │                  │
+        └────────┬─────────┘
+                 ▼
+⑤ Anchor：Stage-2 Cat 拟合 (y − main)，再 shrink ≤ 1.6
+                 │
+                 ▼
+⑥ Stack：多 α Ridge bag {0.3,1,3,10,30}
+         ⊕ 与 Anchor 折内加权融合
+                 │
+                 ▼
+⑦ 后处理：MD warm-up（τ=85）
+         + U=TVT+Z 投影（blend=0.7）
+                 │
+                 ▼
+绝对 TVT = last_known + delta  →  submission.csv
+```
+
+交叉验证一律 **按井分组**（GroupKFold），折内只在训练井上选 shrink / blend 权重，再应用到验证井。
+
+| 步骤 | 模块 | 作用 |
+|------|------|------|
+| ① | `features_pf` / `dataset` | 从井 CSV 生成 PF tracks 与行级特征表 |
+| ② | Hard Ridge | 给出可解释的硬基准 `hard` |
+| ③④ | Main / Alt CatBoost | 两路残差树模型，增加多样性 |
+| ⑤ | Anchor Cat | 校正 Main 的系统性残差 |
+| ⑥ | Stack | 多正则 Ridge 袋装 + 与 Anchor 融合 |
+| ⑦ | Post-process | 侧钻段起始段衰减 + 轨迹连续性投影 |
 
 默认超参集中在 `src/rogii/config.py`。完整复现请用默认参数在全量 `train/` 上训练；`--fast` 仅用于冒烟，结果不可比。
 
@@ -77,10 +112,10 @@ python scripts/05_infer.py --data $ROGII_DATA_ROOT --fast
 ```text
 src/rogii/
   config.py       默认超参
-  features_pf.py  粒子滤波 tracks
-  dataset.py      井 CSV → 特征表
-  train.py        Hard + Cat + Anchor + Stack
-  infer.py        折平均 + 后处理 + submission
+  features_pf.py  ① 粒子滤波 tracks
+  dataset.py      ① 井 CSV → 特征表
+  train.py        ②–⑥ Hard + Cat + Anchor + Stack
+  infer.py        折平均 + ⑦ 后处理 + submission
   stack.py / postprocess.py / cv.py / metrics.py / ...
 scripts/
   01_eda.py  02_demo.py  03_run_stack.py  04_train.py  05_infer.py

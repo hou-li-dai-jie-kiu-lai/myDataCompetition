@@ -26,5 +26,5 @@ myDataCompetition/
 
 ## Kaggle
 
-- [`rogii-wellbore`](./rogii-wellbore)：Kaggle ROGII Wellbore Geology Prediction
+- [`rogii-wellbore`](./rogii-wellbore)：Kaggle ROGII Wellbore Geology Prediction（Private 422 / 6191，铜牌）
 
