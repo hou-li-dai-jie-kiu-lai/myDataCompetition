@@ -1,0 +1,50 @@
+# secrets & credentials
+.env
+.env.*
+*.pem
+*token*
+*TOKEN*
+.kaggle/
+kaggle.json
+access_token
+
+# data & heavy artifacts (not for this share repo)
+data/
+datasets/
+*.parquet
+*.pkl
+*.joblib
+*.npz
+*.npy
+*.h5
+*.pt
+*.pth
+*.cbm
+*.lgb
+models/
+bundles/
+submissions/*.csv
+**/submission.csv
+
+# python / IDE
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# local scratch
+local_scratch/
+outputs/
+artifacts/
+*.log
