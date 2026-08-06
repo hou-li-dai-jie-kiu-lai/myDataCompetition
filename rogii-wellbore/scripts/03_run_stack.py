@@ -1,5 +1,5 @@
 """
-Run topline stacking on user-provided OOF channels.
+Run residual stacking on user-provided OOF channels.
 
 NPZ keys (aligned length n):
   y, wells, md, main, alt_a, alt_b, hard, stock, anchor
@@ -23,9 +23,9 @@ from rogii import channels_from_npz, run_topline_stack, well_rmse_table
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Stack OOF channels from an NPZ file.")
     ap.add_argument("--npz", type=Path, required=True)
-    ap.add_argument("--out", type=Path, default=ROOT / "outputs" / "topline_stack")
+    ap.add_argument("--out", type=Path, default=ROOT / "outputs" / "stack_out")
     ap.add_argument("--tau", type=float, default=85.0)
     args = ap.parse_args()
 

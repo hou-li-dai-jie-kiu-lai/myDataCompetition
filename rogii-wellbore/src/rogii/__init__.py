@@ -1,4 +1,4 @@
-"""ROGII topline share: metrics, CV, postprocess, residual stacking."""
+"""ROGII Wellbore Geology Prediction — train / infer / stacking helpers."""
 
 from .metrics import rmse, well_rmse_table
 from .cv import iter_group_kfold

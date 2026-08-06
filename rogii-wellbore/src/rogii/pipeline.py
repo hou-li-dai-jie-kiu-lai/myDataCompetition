@@ -37,7 +37,7 @@ def run_topline_stack(
     n_splits: int = 5,
 ) -> ToplineResult:
     """
-    Full topline after base OOFs exist:
+    Residual stacking after base OOFs exist:
       design matrix -> ridge bag + anchor blend -> warm-up PP
     """
     X, y, wells = build_design_matrix(channels)

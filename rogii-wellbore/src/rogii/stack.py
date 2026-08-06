@@ -43,7 +43,7 @@ def fit_predict_stack_oof(
     blend_grid: int = BLEND_GRID,
 ) -> StackOOFResult:
     """
-    Topline stacking:
+    Residual stacking:
 
     1) Multi-alpha Ridge bag on residual (y - main), added back to main
     2) Fold-wise blend with anchor: w * anchor + (1-w) * ridge_bag

@@ -1,11 +1,10 @@
 """
-Final-recipe defaults aligned with our private-LB topline (private 8.836).
+Default hyperparameters for the published ROGII pipeline.
 
-These match the competition submit stack:
   PF: 64 seeds × 250 particles, scales (3,5,8,12), dual modes ±15
   Hard: Ridge(alpha=1, positive=True) on raw/aff/dual tracks
-  Main Cat: P20H-style residual-on-hard (8000 iter, depth 7, lr 0.025, OD)
-  Anchor: Stage2-style Cat on (y - main), shrink grid up to 1.6
+  Main Cat: residual-on-hard (8000 iter, depth 7, lr 0.025, OD)
+  Anchor: Stage-2 Cat on (y - main), shrink grid up to 1.6
   Stack: multi-alpha Ridge bag {0.3,1,3,10,30} ⊕ blend with anchor
   PP: warm-up tau=85, U=TVT+Z projection blend=0.7
   CV: GroupKFold 5 by well
@@ -25,7 +24,7 @@ N_SPLITS = 5
 # --- Hard Ridge ---
 HARD_RIDGE_ALPHA = 1.0
 
-# --- CatBoost (main = P20H-style) ---
+# --- CatBoost (main) ---
 CAT_MAIN = dict(
     iterations=8000,
     depth=7,
@@ -41,7 +40,7 @@ CAT_MAIN = dict(
     allow_writing_files=False,
 )
 
-# alt channel (second DNA, different seed / slightly shallower)
+# alt channel (shallower / different seed; no dual tracks at train time)
 CAT_ALT = dict(
     iterations=8000,
     depth=6,
@@ -57,7 +56,7 @@ CAT_ALT = dict(
     allow_writing_files=False,
 )
 
-# Stage2 / anchor
+# Stage-2 / anchor
 CAT_ANCHOR = dict(
     iterations=5000,
     depth=5,
@@ -76,11 +75,11 @@ ANCHOR_SMAX = 1.6
 STACK_ALPHAS = (0.3, 1.0, 3.0, 10.0, 30.0)
 BLEND_GRID = 41
 
-# --- Post-process (final submit) ---
+# --- Post-process ---
 PP_TAU = 85.0
 PP_BLEND = 0.7
 
-# Reported final numbers (reference only; not computed in-repo)
+# Leaderboard reference (not computed in-repo)
 REF_PRIVATE_LB = 8.836
 REF_PUBLIC_LB = 7.841
 REF_OOF_PROJ = 8.398

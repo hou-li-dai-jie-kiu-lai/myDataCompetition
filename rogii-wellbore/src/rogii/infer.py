@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .config import N_PARTICLES, N_SEEDS, PP_BLEND, PP_TAU
-from .dataset import build_dataset
+from .dataset import build_dataset, expanding_well_stats
 from .features_pf import track_matrix
 from .postprocess import apply_pp_delta, warmup_delta
 
@@ -29,7 +29,9 @@ def _predict_fold(df: pd.DataFrame, fold: dict, track_cols: list[str], s2_cols: 
     ).astype(np.float32)
     stock = df["stock"].to_numpy(np.float32)
     md = df["md_since"].to_numpy(np.float32)
+    wells = df["well"].astype(str).to_numpy()
     ae = (main - hard).astype(np.float32)
+    em, es = expanding_well_stats(wells, ae)
     s2 = pd.DataFrame(
         {
             "main": main,
@@ -38,8 +40,8 @@ def _predict_fold(df: pd.DataFrame, fold: dict, track_cols: list[str], s2_cols: 
             "ae": ae,
             "abs_ae": np.abs(ae),
             "md": md,
-            "em": ae,
-            "es": np.abs(ae),
+            "em": em,
+            "es": es,
         }
     )
     shrink = float(fold.get("anchor_shrink", 1.0))

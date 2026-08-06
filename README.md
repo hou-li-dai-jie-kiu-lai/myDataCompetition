@@ -9,6 +9,7 @@
 ```
 myDataCompetition/
 ├── README.md              # 本文件
+├── rogii-wellbore/        # Kaggle：ROGII Wellbore Geology Prediction
 ├── tianchi-food-sound/    # 天池：食物声音识别
 ├── tianchi-heartbeat/     # 天池：心跳信号分类预测
 ├── tianchi-building/      # 天池：建筑物识别
@@ -25,5 +26,5 @@ myDataCompetition/
 
 ## Kaggle
 
-- [`rogii-wellbore`](./rogii-wellbore): Kaggle ROGII Wellbore Geology Prediction — topline writeup & code
+- [`rogii-wellbore`](./rogii-wellbore)：Kaggle ROGII Wellbore Geology Prediction
 

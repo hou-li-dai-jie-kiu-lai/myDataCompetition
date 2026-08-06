@@ -15,7 +15,7 @@ def robfit(s: np.ndarray, y: np.ndarray, deg: int = 4) -> np.ndarray:
     return np.polyval(c, s)
 
 
-def warmup_delta(delta: np.ndarray, md_since: np.ndarray, tau: float = 85.0) -> np.ndarray:  # final PP_TAU
+def warmup_delta(delta: np.ndarray, md_since: np.ndarray, tau: float = 85.0) -> np.ndarray:
     w = 1.0 - np.exp(-np.maximum(md_since, 0.0) / max(tau, 1e-6))
     return (w * np.asarray(delta, dtype=np.float64)).astype(np.float32)
 

@@ -1,4 +1,4 @@
-"""Infer test wells and write submission.csv (defaults = final PF settings)."""
+"""Infer test wells and write submission.csv."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ from rogii.infer import infer_topline, write_submission
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Infer ROGII test wells (defaults from config.py).")
     ap.add_argument("--data", type=Path, default=None, help="data root containing test/")
     ap.add_argument("--artifact", type=Path, default=ROOT / "outputs" / "topline_artifact.joblib")
     ap.add_argument("--n-seeds", type=int, default=N_SEEDS)

@@ -1,4 +1,4 @@
-"""Build features + train topline OOF (requires ROGII_DATA_ROOT or --data)."""
+"""Build features and train OOF models (requires --data or ROGII_DATA_ROOT)."""
 from __future__ import annotations
 
 import argparse
@@ -15,22 +15,18 @@ from rogii.train import save_artifacts, train_topline
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Train final-recipe topline (defaults = private-LB submit settings)."
-    )
+    ap = argparse.ArgumentParser(description="Train ROGII pipeline (defaults from config.py).")
     ap.add_argument("--data", type=Path, default=None, help="data root or train/ directory")
     ap.add_argument("--max-wells", type=int, default=None)
-    ap.add_argument("--n-seeds", type=int, default=N_SEEDS, help=f"default {N_SEEDS} (final)")
-    ap.add_argument(
-        "--n-particles", type=int, default=N_PARTICLES, help=f"default {N_PARTICLES} (final)"
-    )
+    ap.add_argument("--n-seeds", type=int, default=N_SEEDS, help=f"default {N_SEEDS}")
+    ap.add_argument("--n-particles", type=int, default=N_PARTICLES, help=f"default {N_PARTICLES}")
     ap.add_argument("--n-splits", type=int, default=N_SPLITS)
     ap.add_argument("--cat-iterations", type=int, default=None, help="override Cat iterations")
     ap.add_argument("--gpu", action="store_true", help="train CatBoost on GPU if available")
     ap.add_argument(
         "--fast",
         action="store_true",
-        help="smoke settings (not final): 4 seeds, 40 particles, 150 cat iters",
+        help="smoke settings: 4 seeds, 40 particles, 150 cat iters, max 8 wells",
     )
     ap.add_argument("--out", type=Path, default=ROOT / "outputs" / "topline_artifact.joblib")
     args = ap.parse_args()
@@ -42,7 +38,7 @@ def main() -> None:
             args.cat_iterations = 150
         if args.max_wells is None:
             args.max_wells = 8
-        print("[fast] smoke overrides enabled (not final-score settings)", flush=True)
+        print("[fast] smoke overrides enabled", flush=True)
 
     data = args.data
     if data is None:

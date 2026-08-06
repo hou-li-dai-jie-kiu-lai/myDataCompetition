@@ -147,3 +147,21 @@ def default_cat_cols(track_cols: list[str] | None = None) -> list[str]:
     ]
     track_cols = track_cols or default_track_cols()
     return base + track_cols
+
+
+def expanding_well_stats(wells: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Per-well expanding mean / std of `v` (row order within each well preserved)."""
+    out_m = np.zeros(len(v), np.float32)
+    out_s = np.zeros(len(v), np.float32)
+    tmp = pd.DataFrame({"well": wells, "v": v})
+    for _, sub in tmp.groupby("well", sort=False):
+        idx = sub.index.to_numpy()
+        x = sub["v"].to_numpy(np.float64)
+        cs = np.cumsum(x)
+        cs2 = np.cumsum(x * x)
+        n = np.arange(1, len(x) + 1, dtype=np.float64)
+        m = cs / n
+        s = np.sqrt(np.maximum(cs2 / n - m * m, 0.0))
+        out_m[idx] = m.astype(np.float32)
+        out_s[idx] = s.astype(np.float32)
+    return out_m, out_s

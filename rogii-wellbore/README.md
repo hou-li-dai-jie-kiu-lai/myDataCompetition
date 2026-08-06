@@ -1,73 +1,74 @@
 # ROGII Wellbore Geology Prediction
 
-Kaggle：[rogii-wellbore-geology-prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
+Kaggle · [rogii-wellbore-geology-prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
 
-一条 topline 的完整可复现流水线。默认超参对齐我们**最终私榜提交**设定。
+- **任务**：预测水平井侧钻段 **TVT**（RMSE ↓）
+- **数据**：每口井一对 CSV — `{well}__horizontal_well.csv` + `{well}__typewell.csv`
+- **CV**：GroupKFold × 5（按井分组）
+- **成绩**：Private **8.836** / Public **7.841**（约第 422）
 
-| 项 | 值 |
-|----|-----|
-| 私榜 | **8.836**（最终约第 422） |
-| 公榜（同提交） | 7.841 |
-| 本地 OOF proj（原实验记录） | ≈ 8.40 |
-| 指标 | RMSE ↓ |
-| CV | GroupKFold × 5（按井） |
-
-不含赛题数据包、不含已训练权重、不含 API token。
+本目录提供可运行的完整训练与推理代码（不含赛题数据包与已训练权重）。
 
 ---
 
-## 赛题与数据
+## 方法概览
 
-预测水平井侧钻段 **TVT**。每口井：`{well}__horizontal_well.csv` + `{well}__typewell.csv`。
+| 阶段 | 内容 |
+|------|------|
+| 特征 | 粒子滤波（PF）多尺度 TVT tracks：raw / affine / dual；附带几何与 GR 等列 |
+| Hard | `Ridge(α=1, positive=True)` 拟合 tracks |
+| Main Cat | 在 hard 上拟合残差（CatBoost） |
+| Alt Cat | 第二通道（去掉 dual tracks），同残差设定 |
+| Anchor | 第二阶段 Cat 拟合 `(y − main)`，训练集 shrink ≤ 1.6 |
+| Stack | 多 α Ridge bag `{0.3,1,3,10,30}`，再与 anchor 折内加权融合 |
+| 后处理 | MD warm-up（τ=85）+ `U = TVT + Z` 投影（blend=0.7） |
+
+默认超参集中在 `src/rogii/config.py`。完整复现请用默认参数在全量 `train/` 上训练；`--fast` 仅用于冒烟，结果不可比。
+
+> 竞赛过程中还实验过 modescan / beam / bi\_\* 等增广特征。本仓库以 PF tracks + 几何为主干，并给出与公开成绩对应的超参；跑通上述流水线即可得到同结构提交。
+
+---
+
+## 环境与数据
 
 ```bash
+cd rogii-wellbore
+pip install -r requirements.txt
+
 kaggle competitions download -c rogii-wellbore-geology-prediction -p ./data
-export ROGII_DATA_ROOT=/path/to/data   # 含 train/ test/ sample_submission.csv
+# 解压后目录应含 train/、test/、sample_submission.csv
+export ROGII_DATA_ROOT=/path/to/data
 ```
 
----
-
-## Topline（与最终结果对齐）
-
-默认写在 `src/rogii/config.py`：
-
-| 模块 | 最终设定 |
-|------|----------|
-| PF | **64 seeds × 250 particles**；scales `(3,5,8,12)`；dual `±15`；raw / affine / dual tracks |
-| Hard | `Ridge(alpha=1, positive=True)` on tracks |
-| Main Cat | 对 hard 的残差；`8000` iter, depth `7`, lr `0.025`, `od_wait=300` |
-| Alt Cat | 第二通道（去 dual tracks）；同量级、seed=7 |
-| Anchor | Stage2 Cat 拟合 `(y-main)` + train 上 shrink≤**1.6** |
-| Stack | α∈`{0.3,1,3,10,30}` Ridge bag ⊕ 与 anchor 折内融合 |
-| PP | warm-up **τ=85** + U=TVT+Z 投影 **blend=0.7** |
-
-> 仓库实现了同一拓扑与最终超参。竞赛全量特征里还有 modescan / beam / bi_* 等增广；本复现以 PF tracks + 几何为主干。要贴近最终分数请用**默认全量参数**在完整 `train/` 上跑，不要用 `--fast`。
+Windows PowerShell 可用 `$env:ROGII_DATA_ROOT = "..."`。
 
 ---
 
 ## 运行
 
 ```bash
-cd rogii-wellbore
-pip install -r requirements.txt
-
-# 无数据冒烟（只测 stack）
+# 无竞赛数据：仅验证 stacking / 后处理逻辑
 python scripts/02_demo.py
 
-# 最终设定训练（耗时长：全井 × 64×250 PF）
+# 训练（默认 64 seeds × 250 particles，耗时较长）
 python scripts/04_train.py --data $ROGII_DATA_ROOT
-# 可选 GPU：
+# 可选：CatBoost GPU
 python scripts/04_train.py --data $ROGII_DATA_ROOT --gpu
 
-# 最终设定推理
+# 推理 → outputs/submission.csv
 python scripts/05_infer.py --data $ROGII_DATA_ROOT
 
-# 仅管道冒烟（参数故意缩小，分数不可比）
+# 冒烟（缩小 PF / Cat / 井数，勿用来对标成绩）
 python scripts/04_train.py --data $ROGII_DATA_ROOT --fast
 python scripts/05_infer.py --data $ROGII_DATA_ROOT --fast
 ```
 
-产物在 `outputs/`（gitignore）：`topline_artifact.joblib`、`submission.csv`。
+可选：
+
+- `scripts/01_eda.py`：轻量 EDA（需数据）
+- `scripts/03_run_stack.py`：对已有 OOF 通道 NPZ 单独跑 stacking
+
+产物写入 `outputs/`（已 gitignore）：`topline_artifact.joblib`、`submission.csv`。
 
 ---
 
@@ -75,23 +76,22 @@ python scripts/05_infer.py --data $ROGII_DATA_ROOT --fast
 
 ```text
 src/rogii/
-  config.py        最终超参（唯一真相来源）
-  features_pf.py   PF tracks
-  dataset.py       CSV → 特征表
-  train.py         Hard + Cat + Anchor + Stack
-  infer.py         折平均 + PP + submission
-  metrics/cv/postprocess/stack/pipeline/...
+  config.py       默认超参
+  features_pf.py  粒子滤波 tracks
+  dataset.py      井 CSV → 特征表
+  train.py        Hard + Cat + Anchor + Stack
+  infer.py        折平均 + 后处理 + submission
+  stack.py / postprocess.py / cv.py / metrics.py / ...
 scripts/
-  01_eda.py  02_demo.py  04_train.py  05_infer.py
+  01_eda.py  02_demo.py  03_run_stack.py  04_train.py  05_infer.py
 ```
 
 ---
 
 ## 注意
 
-- 必须按井分组；禁止同井 train 解释覆写 test  
-- `--fast` 只用于验证代码可跑，**不能**对标私榜 8.836  
-- 数据受竞赛规则约束，勿公开二次分发
+- 必须按井分组交叉验证；禁止用同井标签泄漏到验证/测试
+- 赛题数据受竞赛规则约束，请勿二次公开分发
 
 ## License
 
