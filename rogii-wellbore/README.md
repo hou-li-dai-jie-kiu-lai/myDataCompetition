@@ -5,7 +5,7 @@ Kaggle · [rogii-wellbore-geology-prediction](https://www.kaggle.com/competition
 - **任务**：预测水平井侧钻段 **TVT**（RMSE ↓）
 - **数据**：每口井一对 CSV — `{well}__horizontal_well.csv` + `{well}__typewell.csv`
 - **CV**：GroupKFold × 5（按井分组）
-- **成绩**：Private Ranking **422 / 6191（铜牌）**；Private **8.836** / Public **7.841**
+- **成绩**：🥉 Private Ranking **422 / 6191（铜牌）**；Private **8.836** / Public **7.841**
 
 本目录提供可运行的完整训练与推理代码（不含赛题数据包与已训练权重）。
 
