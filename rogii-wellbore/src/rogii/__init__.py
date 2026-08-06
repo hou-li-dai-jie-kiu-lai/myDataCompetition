@@ -6,6 +6,8 @@ from .postprocess import warmup_delta, project_well_absolute, apply_pp_delta
 from .stack import fit_predict_stack_oof
 from .pipeline import run_topline_stack, channels_from_npz
 from .dataio import load_horizontal_well, build_residual_table
+from .train import train_topline, save_artifacts
+from .infer import infer_topline, write_submission
 
 __all__ = [
     "rmse",
@@ -19,4 +21,8 @@ __all__ = [
     "channels_from_npz",
     "load_horizontal_well",
     "build_residual_table",
+    "train_topline",
+    "save_artifacts",
+    "infer_topline",
+    "write_submission",
 ]
