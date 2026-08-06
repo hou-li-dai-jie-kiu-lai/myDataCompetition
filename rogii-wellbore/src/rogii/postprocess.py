@@ -5,7 +5,6 @@ import pandas as pd
 
 
 def robfit(s: np.ndarray, y: np.ndarray, deg: int = 4) -> np.ndarray:
-    """Robust polynomial fit (IRLS-style weights)."""
     if len(s) < deg + 2:
         return y.copy()
     c = np.polyfit(s, y, deg)
@@ -18,7 +17,7 @@ def robfit(s: np.ndarray, y: np.ndarray, deg: int = 4) -> np.ndarray:
 
 def warmup_delta(delta: np.ndarray, md_since: np.ndarray, tau: float = 85.0) -> np.ndarray:
     w = 1.0 - np.exp(-np.maximum(md_since, 0.0) / max(tau, 1e-6))
-    return (w * delta).astype(np.float32)
+    return (w * np.asarray(delta, dtype=np.float64)).astype(np.float32)
 
 
 def project_well_absolute(
@@ -32,18 +31,14 @@ def project_well_absolute(
     blend: float = 0.7,
     deg: int = 4,
 ) -> np.ndarray:
-    """
-    Project absolute TVT on one well using U = TVT + Z continuity from heel anchor.
-
-    Parameters are geometry + current absolute TVT prediction (no labels on eval rows).
-    """
+    """Project absolute TVT via U = TVT + Z continuity."""
     anchor_u = float(tvt_anchor) + float(z_anchor)
     s = (md - md_anchor) / max(md_end - md_anchor, 1e-6)
     fit = robfit(s, (tvt_abs + z) - anchor_u, deg=deg)
     tvt_fit = (anchor_u + fit) - z
     out = (1.0 - blend) * tvt_abs + blend * tvt_fit
     if not np.all(np.isfinite(out)):
-        return tvt_abs.astype(np.float32)
+        return np.asarray(tvt_abs, dtype=np.float32)
     return out.astype(np.float32)
 
 
@@ -59,10 +54,9 @@ def apply_pp_delta(
     do_proj: bool = True,
 ) -> np.ndarray:
     """
-    Apply warm-up + optional per-well projection on residual-to-last-known predictions.
+    Warm-up + optional per-well projection on residual predictions.
 
-    well_frames[well] must contain columns MD, Z, TVT_input (prefix known where notna).
-    If ids is provided, row index in the well file is parsed from `{well}_{idx}`.
+    well_frames[well] needs MD, Z, TVT_input.
     """
     out = np.asarray(delta, dtype=np.float32).copy()
     if do_warmup:
@@ -74,7 +68,7 @@ def apply_pp_delta(
     for w in np.unique(wells):
         m = wells == w
         hw = well_frames.get(str(w))
-        if hw is None:
+        if hw is None or "TVT_input" not in hw.columns:
             continue
         kn = hw[hw["TVT_input"].notna()]
         if len(kn) < 5:
@@ -84,8 +78,8 @@ def apply_pp_delta(
         if ids is not None:
             row_idx = np.array([int(str(i).rsplit("_", 1)[1]) for i in ids[m]], dtype=np.int32)
         else:
-            # assume aligned with eval rows in order — caller should pass ids when possible
-            row_idx = np.arange(m.sum(), dtype=np.int32)
+            row_idx = np.arange(int(m.sum()), dtype=np.int32)
+            row_idx = np.clip(row_idx, 0, len(hw) - 1)
         md = hw["MD"].to_numpy(float)[row_idx]
         z = hw["Z"].to_numpy(float)[row_idx]
         tvt_abs = last_tvt + out[m]

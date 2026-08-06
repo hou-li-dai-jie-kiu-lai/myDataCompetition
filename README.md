@@ -25,4 +25,5 @@ myDataCompetition/
 
 ## Kaggle
 
-- [`rogii-wellbore-p88`](./rogii-wellbore-p88): Kaggle ROGII Wellbore Geology Prediction — P88 writeup & repro kit (private LB 8.836)
+- [`rogii-wellbore`](./rogii-wellbore): Kaggle ROGII Wellbore Geology Prediction — topline writeup & code
+
