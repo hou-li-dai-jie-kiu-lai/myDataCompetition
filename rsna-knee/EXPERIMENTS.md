@@ -1,29 +1,27 @@
-# RSNA Knee — 实验备忘（精简）
+# RSNA Knee — Experiment notes
 
-## 有效 / 持平
+## Effective or tied with the public baseline
 
-- **R6-w1 + Raptor384/224 + per-finding**：公开强基线 **0.958**
-- **S6→Raptor-half (W=0.12)**：公开 0.958；细分数略优，进最终 #1 席
-- **Reader @0.10**：公开 0.958，进最终 #2 席
-- **coat-extra v10geo @0.15**（不改 `W_RAPTOR_C`）：公开 0.958
-- **G233 coat320 @0.15 + S6**：公开 0.958（更轻，能过隐藏集时限）
+- **R6-w1 + Raptor-384/224 + per-finding blend**: Public **0.958** (reference ensemble)
+- **S6 → Raptor-half (`W_S6=0.12`)**: Public 0.958; selected as primary submission
+- **Reader @ 0.10**: Public 0.958; selected as secondary submission
+- **coat-extra v10geo @ 0.15** (no change to `W_RAPTOR_C`): Public 0.958
+- **G233 CoAtNet-320 @ 0.15 + S6**: Public 0.958; lighter arm that still passed hidden runtime
 
-## 无效 / 有害
+## Ineffective or harmful
 
-- **gold-58 reweight-cons**：离线约 +0.009 → 线上 **0.954**
-- Contusion / Fracture 等单病 `W_RAPTOR` 盲调：多为 **0.957**
-- **S6→compact@0.3**（公开复现路径）：约 **0.957**
-- Mycelis 等弱 OOF 族：相对基线无明显正增益 → 不加入融合
-- Meniscus/Fracture specialist：gold 上半月板弱于基线 → 不优先
+- **gold-58 reweight-cons**: offline ≈ +0.009 → Public **0.954**
+- Blind single-label edits to `W_RAPTOR` (e.g. Contusion / Fracture): typically **0.957**
+- **S6 → compact @ 0.3** (public reproduction path): ≈ **0.957**
+- Weak OOF families such as Mycelis: no reliable gain vs the reference ensemble
+- Meniscus/Fracture specialist: weaker than the baseline on gold meniscus; deprioritized
 
-## 提交失败（runtime）
+## Submission failures (runtime)
 
-S6 + 多路 Raptor-384（triple / bs14 / dual-extra / angelus-v4 / fullcohort 等）在公开 notebook 可跑完，但正式提交报错：
+Stacks that combined S6 with multiple additional Raptor-384 checkpoints (triple / bs14 / dual-extra / angelus-v4 / fullcohort, etc.) could finish in a public notebook run, but official scoring failed with:
 
 > submission notebook exceeded the allowed runtime
 
-教训：代码赛加模型必须给隐藏集留足时间余量。
+## Private leaderboard
 
-## 最终私榜
-
-多数 Public 0.958 的提交，Private 均为 **0.942**；最终计分席未因赛末堆叠而改变。
+Most Public 0.958 submissions scored Private **0.942**. The final selected seats were not improved by late-stage heavy stacking.
