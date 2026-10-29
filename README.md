@@ -9,6 +9,7 @@
 ```
 myDataCompetition/
 ├── README.md              # 本文件
+├── rsna-knee/             # Kaggle：RSNA Knee Abnormality Detection
 ├── rogii-wellbore/        # Kaggle：ROGII Wellbore Geology Prediction
 ├── tianchi-food-sound/    # 天池：食物声音识别
 ├── tianchi-heartbeat/     # 天池：心跳信号分类预测
@@ -26,5 +27,5 @@ myDataCompetition/
 
 ## Kaggle
 
+- [`rsna-knee`](./rsna-knee)：Kaggle RSNA Knee Abnormality Detection 🥉（Private 592 / 6299）
 - [`rogii-wellbore`](./rogii-wellbore)：Kaggle ROGII Wellbore Geology Prediction 🥉（Private 422 / 6191）
-
