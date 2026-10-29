@@ -4,108 +4,105 @@
 
 Kaggle · [rsna-knee-abnormality-detection](https://www.kaggle.com/competitions/rsna-knee-abnormality-detection) · Code Competition
 
-- **Task**: Predict 12 clinically relevant knee findings from MRI studies (ACL / MCL / menisci / three-compartment OA / effusion / synovitis / Baker's cyst / contusion / fracture, etc.). Metric: **macro ROC-AUC** over the 12 labels.
-- **Setting**: Code competition. Only ~1.3% of training studies have gold labels; the rest rely on report-derived weak labels and/or public checkpoints. Submissions are re-run on a hidden test set under a strict runtime limit.
-- **Result**: **Private 592 / 6299 (Bronze)**; Private **0.942** / Public **0.958** (Public ≈ #575)
-- **Team**: Solo
+| | |
+|---|---|
+| **Task** | Multi-label abnormality detection on knee MRI (12 findings) |
+| **Metric** | Macro-averaged ROC-AUC |
+| **Result** | Private **592 / 6299** (Bronze) · Private **0.942** / Public **0.958** |
+| **Team** | Solo |
 
-This folder is a post-competition writeup (approach, final blend, what worked / failed). It does **not** include competition data or third-party weight files. See [EXPERIMENTS.md](./EXPERIMENTS.md) for a compact experiment list.
+This folder is a post-competition writeup of the final solution and the main experimental conclusions. It does not redistribute competition data or third-party checkpoints. A compact experiment list is available in [EXPERIMENTS.md](./EXPERIMENTS.md).
 
 ---
 
-## Final submissions
+## Problem setting
 
-Both selected submissions sit on a community-reproducible **Public 0.958 strong baseline** (Private score 0.942 for both):
+The task is to predict twelve clinically relevant findings from a knee MRI study—ligament injury (ACL / MCL), meniscal tear, three-compartment osteoarthritis, effusion, synovitis, Baker's cyst, bone contusion, and fracture. Only a small fraction of training studies carry official gold labels; the remaining studies are typically handled via report-derived weak labels or via publicly released models.
 
-1. **S6 → Raptor-half** (primary)  
-   R6 ConvNeXt (Helios `fe055406-w1`) ⊕ public Raptor CoAtNet (384 + 224, A224=0.35) ⊕ per-finding blend; then mix **S6** into the **Raptor side** with a fixed small weight `W_S6=0.12` (not into R6/compact). If S6 fails, fall back to the no-S6 baseline.
-2. **Reader @0.10** (second selected)  
-   Same 0.958 baseline, plus goodpjw’s 2.5D ConvNeXt reader at weight 0.10.
+Because this is a **code competition**, every submission is re-run on a hidden test set under a runtime limit. Model quality and inference cost must be optimized jointly.
 
-Baseline structure:
+---
+
+## Final solution
+
+### Selected submissions
+
+Two variants of the same public ensemble were selected for scoring. Both scored Public **0.958** and Private **0.942**.
+
+1. **Primary — S6 mixed into the Raptor branch**  
+   Start from the public R6 ⊕ dual-resolution Raptor ensemble with per-finding blend weights. Mix S6 into the **Raptor side** at a fixed weight `W_S6 = 0.12`. If S6 fails, fall back to the ensemble without S6.
+
+2. **Secondary — Reader @ 0.10**  
+   Keep the same R6 ⊕ Raptor ensemble and mix in goodpjw’s 2.5D ConvNeXt reader at weight `0.10`.
+
+### Ensemble backbone
 
 ```text
-R6 (ConvNeXt + flip TTA)
-    ⊕
-Raptor-384 SWA   (publication CoAtNet; OAI-blendjev lineage)
-    ⊕
-Raptor-224       (same family; A224≈0.35 into the Raptor side)
-    ⊕
-per-finding W_RAPTOR_C   (frozen; no further gold-58 retuning)
+R6 ConvNeXt  (Helios fe055406-w1, flip TTA)
+        ⊕
+Raptor-384 SWA  (nartaa publication CoAtNet)
+        ⊕
+Raptor-224      (same family; A224 ≈ 0.35)
+        ⊕
+per-finding blend weights W_RAPTOR_C
 ```
 
----
-
-## Approach
-
-### 1. Match the public strong baseline first
-
-Early self-training / weak-label fusion stalled around 0.94x. Reaching **Public 0.958** came from faithfully reproducing the Helios / nartaa / goodpjw stack (true R6-w1 + dual-resolution Raptor + per-finding blend). After that, every change had a hard constraint: **do not go below Public 0.958**.
-
-### 2. Extra models must not hurt—and must fit the hidden runtime
-
-When adding models on top of 0.958, the safer pattern was:
-
-- Add only **small-weight** near-cousin CoAtNets (e.g. coat-extra `v10geo` @0.15, G233@320), and avoid retuning `W_RAPTOR_C`
-- Mix S6 into the **Raptor side** (W=0.12); mixing into compact/R6 (publicly ~0.957) was worse
-
-What to avoid:
-
-| Attempt | Outcome |
-|---------|---------|
-| Grid-search global / per-label weights on noisy gold-58 | Public dropped to **0.954** (offline gains did not transfer) |
-| S6 + multiple Raptor-384 arms (triple / dual-extra / fullcohort, …) | Public notebook finished, but **official submit timed out** on the hidden set |
-| Low-quality pseudo-label weights (e.g. Mycelis, gold≈0.60) | No reliable gain vs baseline → rejected |
-| Meniscus/Fracture specialist (weaker than baseline on gold meniscus) | Deprioritized; not used in final seats |
-
-### 3. Reading the private leaderboard
-
-Many teams clustered at **Public 0.958**. Private leaders were around **0.960**, while the 0.958 public band mostly landed near **~0.942**. The bronze came from a stable reproduction of that strong baseline with careful additive arms—not from last-minute heavy stacking.
-
----
-
-## Timeline (compressed)
-
-| Stage | What | Public |
-|-------|------|--------|
-| Match public stack | R6-w1 + Raptor384/224 + per-finding | **0.958** |
-| Failed reweight | gold-58 reweight-cons | 0.954 |
-| Useful tweaks | S6→Raptor-half; coat-extra v10geo; reader-0.1 | 0.958 (tie / finer digits) |
-| Timeout stacks | S6 + multi R384 / fullcohort, … | Submit failed (runtime) |
-| Light probes | G233@320, etc. | 0.958 (no lift past 0.958) |
-
----
-
-## Reproduction notes (no data)
-
-To reproduce a same-structure submission in a Kaggle code environment, typical public assets include:
+Public assets used in the final stack:
 
 - `heliosli/rsna-knee-r6-frozen-fe055406-w1`
 - `nartaa/rsna-knee-publication-swa-weights-20261007`
-- `nartaa/rsna-knee-s6fall-weights` (S6)
-- `goodpjw2008/rsna-knee-2-5d-convnext-reader` (reader, optional)
-- Optional near-cousin weights: `manatoshoji03/rsna-knee-coat-extra(2)`, etc.
+- `nartaa/rsna-knee-s6fall-weights`
+- `goodpjw2008/rsna-knee-2-5d-convnext-reader` (secondary submission)
 
-Blend outline:
+Near-cousin CoAtNet weights (e.g. from `manatoshoji03/rsna-knee-coat-extra`) were tested as low-weight additives, but did not improve beyond Public 0.958.
 
-1. Rank Raptor-384 and Raptor-224 separately, then combine with A224 into the Raptor side  
-2. Rank-blend with R6 using per-finding `W_RAPTOR_C`  
-3. (Primary) Mix S6 ranks into the Raptor side at `W_S6=0.12`; skip on failure  
-4. Keep the number of inference arms small enough to pass **hidden runtime**
+### Inference blend
 
-Local EffB0-MIL / consensus residual students were tried; they did not beat the baseline’s weak labels reliably and were **not** used in the final selected submissions.
+1. Rank-normalize Raptor-384 and Raptor-224, then combine them with `A224`.  
+2. Rank-blend the Raptor branch with R6 using per-finding weights `W_RAPTOR_C`.  
+3. For the primary submission, mix S6 ranks into the Raptor branch at `W_S6 = 0.12`.  
+4. Limit the number of forward passes so that the hidden-set runtime constraint is satisfied.
+
+---
+
+## Method
+
+### Stage 1 — Reproduce a competitive public ensemble
+
+Self-training and weak-label pipelines initially reached the mid-0.94 range, but lagged behind the strongest public notebooks. The first milestone was therefore a faithful reproduction of a full public stack: R6, dual-resolution Raptor CoAtNet, and per-finding fusion. This yielded a stable Public score of **0.958**, which became the reference point for later work.
+
+### Stage 2 — Search for additive gains under constraints
+
+Subsequent experiments focused on small, controlled modifications that preserve the 0.958 public level and remain within the runtime budget:
+
+- Mix S6 into the Raptor branch rather than into R6/compact (public reproductions of the latter were near 0.957).  
+- Add low-weight near-cousin CoAtNet checkpoints without retuning `W_RAPTOR_C`.  
+- Prefer lighter input resolutions when testing additional CoAtNet arms.
+
+Directions that failed online or at submission time were discarded:
+
+| Direction | Observation |
+|-----------|-------------|
+| Retuning blend weights on the 58-study gold set | Public dropped to **0.954**; offline gains did not transfer |
+| Stacking multiple additional Raptor-384 models together with S6 | Public notebooks finished, but official submits exceeded the hidden runtime limit |
+| Low-quality pseudo-label models | No reliable gain versus the public ensemble |
+| Meniscus/Fracture specialist fine-tunes | Weaker than the baseline on gold meniscus labels; unused |
+
+### Stage 3 — Final selection
+
+The public leaderboard contained a large cluster at **0.958**. Private leaders were near **0.960**, while many entries from the 0.958 public band landed around **0.942**. The selected submissions belong to that stable public cluster: they prioritize a faithful strong ensemble and conservative additive components over aggressive late-stage stacking.
 
 ---
 
 ## Takeaways
 
-1. In code competitions, a **reproducible public strong stack** often beats early self-training; match the baseline before hunting deltas.  
-2. Offline reweighting on a tiny gold set overfits easily and can hurt the leaderboard.  
-3. Budget **hidden runtime** before adding arms: a green public run ≠ a scored submission.  
-4. Small-weight near-cousin blends (same-family CoAtNet / S6→Raptor-half) are usually safer than aggressive formula changes.
+1. When strong public ensembles exist, reproducing them is often more valuable than early self-training.  
+2. Blend-weight search on a tiny gold subset overfits easily and can hurt the leaderboard.  
+3. Hidden-set runtime is part of the objective; a successful public dry-run does not guarantee a scored submission.  
+4. Small-weight mixtures of closely related models are usually safer than large changes to the fusion formula.
 
 ---
 
 ## License
 
-Writeup under MIT. Competition data and third-party weights remain under their original terms—do not redistribute.
+Documentation is released under MIT. Competition data and third-party model weights remain under their original terms and must not be redistributed here.
